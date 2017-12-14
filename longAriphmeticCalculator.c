@@ -1,6 +1,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include "colors.h"
+
+const char* text_color = GREEN;
+const char* error_color = BOLDRED;
 
 // структура для хранения лексем - чисел, знаков операций и скобок
 typedef struct lexeme_t {
@@ -41,11 +45,13 @@ int priority(lexeme_t c) {
 
 	case '*':
 	case '/':
-	case '^':
 		return 1;
 
-	default:
+	case '^':
 		return 2;
+
+	default:
+		return 3;
 	}
 }
 
@@ -109,7 +115,7 @@ lexeme_t* parse(int *size, FILE *f) {
 			lexemes[*size].sign = 1;
 
 			// если встретили структур вида [не число] - [число] или выражение началось с минус числа
-			if ((*size > 2 && lexemes[*size - 1].value[0] == '-' && !is_digit(lexemes[*size - 2].value[0])) || (*size == 1 && lexemes[0].value[0] == '-')) {
+			if ((*size > 2 && lexemes[*size - 1].value[0] == '-' && is_ariphmetic(lexemes[*size - 2].value[0])) || (*size == 1 && lexemes[0].value[0] == '-')) {
 				(*size)--; // то переходим к предыдущей лексеме
 
 				lexemes[*size].sign = -1; // и делаем её отрицательной
@@ -129,7 +135,7 @@ lexeme_t* parse(int *size, FILE *f) {
 			c = fgetc(f);
 		}
 		else { // это что-то странное, и нужно заканчивать работу
-			printf("Error! Unknown symbol in expression: %c. Stopped!\n", c);
+			printf("%sError! Unknown symbol %s'%c'%s in expression.%s\n", error_color, RESET, c, error_color, RESET);
 
 			// очищаем выделенную динамическую память
 			for (int i = 0; i < *size; i++)
@@ -161,43 +167,43 @@ int check(lexeme_t *lexemes, int size) {
 			brackets--;
 
 		if (brackets < 0) {
-			printf("Brackets are disbalanced\n");
+			printf("%sBrackets are disbalanced%s\n", error_color, RESET);
 			return 0;
 		}
 
 		if (i == 0) {
 			if (!is_digit(lex.value[0]) && lex.value[0] != '(') {
-				printf("Expression must begin with a number or '('\n");
+				printf("%sExpression must begin with a number or '('%s\n", error_color, RESET);
 				return 0;
 			}
 		}
 		else {
 			if (i == size - 1) {
 				if (!is_digit(lex.value[0]) && lex.value[0] != ')') {
-					printf("Expression must end with a number or ')'\n");
+					printf("%sExpression must end with a number or ')'%s\n", error_color, RESET);
 					return 0;
 				}
 			}
 
 			if (is_ariphmetic(lexemes[i - 1].value[0]) && !is_digit(lex.value[0]) && lex.value[0] != '(') {
-				printf("After operation can be only number, variable or '('\n");
+				printf("%sAfter operation can be only number or '('%s\n", error_color, RESET);
 				return 0;
 			}
 
 			if (lexemes[i - 1].value[0] == '(' && !is_digit(lexemes[i].value[0]) && lexemes[i].value[0] != '(') {
-				printf("After '(' can be only '(', variable or number\n");
+				printf("%sAfter '(' can be only '(' or number%s\n", error_color, RESET);
 				return 0;
 			}
 
 			if (is_digit(lexemes[i - 1].value[0]) && !is_ariphmetic(lex.value[0]) && lex.value[0] != ')') {
-				printf("After number can be only operation or ')'\n");
+				printf("%sAfter number can be only operation or ')'%s\n", error_color, RESET);
 				return 0;
 			}
 		}
 	}
 
 	if (brackets != 0) {
-		printf("Brackets are disbalanced\n");
+		printf("%sBrackets are disbalanced%s\n", error_color, RESET);
 		return 0;
 	}
 
@@ -208,7 +214,7 @@ int check(lexeme_t *lexemes, int size) {
 tree_t* make_tree(lexeme_t *lexemes, int first, int last) {
 	tree_t* tree = (tree_t *)malloc(sizeof(tree_t)); // выделяем память под элемент дерева
 
-	int k = 0, minPriority = 2;
+	int k = 0, minPriority = 3;
 	int brackets = 0;
 
 	for (int i = first; i <= last; i++) {
@@ -226,12 +232,12 @@ tree_t* make_tree(lexeme_t *lexemes, int first, int last) {
 		}
 	}
 
-	if (minPriority == 2 && lexemes[first].value[0] == '(' && lexemes[last].value[0] == ')') {
+	if (minPriority == 3 && lexemes[first].value[0] == '(' && lexemes[last].value[0] == ')') {
 		free(tree); // если встретили выражение в скобках, то удаляем текущий лист и формируем дерево от концов скобок (с тем, что внутри скобок)
 
 		return make_tree(lexemes, first + 1, last - 1); // возвращаем дерево выражения, находящегося внутри скобок
 	}
-	else if (minPriority == 2) {
+	else if (minPriority == 3) {
 		tree->lexeme = lexemes[first];
 		tree->left = NULL;
 		tree->right = NULL;
@@ -615,15 +621,15 @@ void fromFile() {
 	char c;
 
 	do {
-		printf("Enter path to file: ");
+		printf("%sEnter path to file: %s", text_color, RESET);
 		scanf("%s%c", buf, &c); // спрашиваем и считываем путь к файлу
 
 		FILE *f = fopen(buf, "r"); // открываем файл на чтение
 		int exit = 0;
 
 		while (!f && !exit) { // если не открылся, повторяем ввод или предлагаем выйти из программы
-			printf("Error during opening file '%s'. Is file here?\n", buf);
-			printf("Enter path or type 'exit': ");
+			printf("%sError during opening file %s'%s'%s. Is file here?%s\n", error_color, RESET, buf, error_color, RESET);
+			printf("%sEnter path or type 'exit': %s", text_color, RESET);
 			scanf("%s%c", buf, &c);
 
 			exit = !strcmp(buf, "exit");
@@ -659,7 +665,7 @@ void fromFile() {
 				free(lexemes);
 			}
 
-			printf("Type act ([repeat] / exit): ");
+			printf("%sType act ([repeat] / exit): %s", text_color, RESET);
 			fgets(buf, sizeof(buf), stdin);
 			printf("\n");
 		}
@@ -670,7 +676,7 @@ void fromConsole() {
 	char buf[256];
 
 	do {
-		printf("Enter expression: "); // если в консольном режиме, то просим ввести выражение
+		printf("%sEnter expression: %s", text_color, RESET); // если в консольном режиме, то просим ввести выражение
 
 		int size;
 		lexeme_t *lexemes = parse(&size, stdin); // получаем массив лексем из стандартного файла ввода
@@ -695,11 +701,11 @@ void fromConsole() {
 
 			free(lexemes);
 		} else if (lexemes) {
-			printf("empty expression!\n");
+			printf("%sempty expression!%s\n", error_color, RESET);
 			free(lexemes);
 		}
 
-		printf("Type act ([repeat] / exit): ");
+		printf("%sType act ([repeat] / exit): %s", text_color, RESET);
 		fgets(buf, sizeof(buf), stdin);
 		printf("\n");
 	} while (!strcmp(buf, "repeat\n") || !strcmp(buf, "\n"));
