@@ -504,17 +504,16 @@ lexeme_t divide(lexeme_t a, lexeme_t b) {
 
 			v.length = mod.length;
 			free(mod.value);
-
-			if (!strcmp(v.value, "0")) {
-				v.value[0] = '\0';
-				v.length = 0;
-			}
 		}
 
 		div.value[div.length++] = count + '0'; // если не делили, то добавили ноль к результату, иначе добавили результат дедения
 
-		if (index <= length)
+		if (index <= length) {
+			if (v.value[0] == '0')
+				v.length = 0;
+			
 			v.value[v.length++] = a.value[index++]; // формируем новое значение для подчисла
+		}
 	} while (index <= length);
 
 	free(v.value);
