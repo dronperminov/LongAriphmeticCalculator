@@ -19,7 +19,7 @@ typedef struct tree_t {
 
 // проверка, что символ является арифметической операцией
 int is_ariphmetic(char c) {
-	return c == '+' || c == '-' || c == '*' || c == '/';
+	return c == '+' || c == '-' || c == '*' || c == '/' || c == '^';
 }
 
 // проверка, что символ является скобкой
@@ -41,6 +41,7 @@ int priority(lexeme_t c) {
 
 	case '*':
 	case '/':
+	case '^':
 		return 1;
 
 	default:
@@ -71,6 +72,8 @@ lexeme_t* parse(int *size, FILE *f) {
 				lexemes[*size].value = "*";
 			else if (c == '/')
 				lexemes[*size].value = "/";
+			else if (c == '^')
+				lexemes[*size].value = "^";
 			else if (c == '(')
 				lexemes[*size].value = "(";
 			else
@@ -84,7 +87,7 @@ lexeme_t* parse(int *size, FILE *f) {
 			}
 
 			c = fgetc(f);
-		} 
+		}
 		else if (is_digit(c)) { // иначе, если считали цифру, то
 			int s_size = 0; // размер строки ноль
 			int s_capacity = 1; // вместимость строки сначала равна 1
@@ -106,7 +109,7 @@ lexeme_t* parse(int *size, FILE *f) {
 			lexemes[*size].sign = 1;
 
 			// если встретили структур вида [не число] - [число] или выражение началось с минус числа
-			if ((*size > 2 && lexemes[*size - 1].value[0] == '-' && !is_digit(lexemes[*size - 2].value[0])) || (*size == 1 && lexemes[0].value[0] == '-')){
+			if ((*size > 2 && lexemes[*size - 1].value[0] == '-' && !is_digit(lexemes[*size - 2].value[0])) || (*size == 1 && lexemes[0].value[0] == '-')) {
 				(*size)--; // то переходим к предыдущей лексеме
 
 				lexemes[*size].sign = -1; // и делаем её отрицательной
@@ -121,10 +124,10 @@ lexeme_t* parse(int *size, FILE *f) {
 				capacity *= 2;
 				lexemes = (lexeme_t *)realloc(lexemes, capacity * sizeof(lexeme_t)); // если число лексем стало больше, чем может вместить массив, то увеличиваем размер в два раза
 			}
-		} 
+		}
 		else if (c == ' ') {
 			c = fgetc(f);
-		} 
+		}
 		else { // это что-то странное, и нужно заканчивать работу
 			printf("Error! Unknown symbol in expression: %c. Stopped!\n", c);
 
@@ -135,6 +138,9 @@ lexeme_t* parse(int *size, FILE *f) {
 
 			free(lexemes);
 			*size = 0; // обнуляем число считанных лексем
+
+			while (c != '\n' && c != EOF)
+				c = fgetc(f); // считываем строку до конца
 
 			return NULL; // возвращем нулевой указатель
 		}
@@ -158,13 +164,13 @@ int check(lexeme_t *lexemes, int size) {
 			printf("Brackets are disbalanced\n");
 			return 0;
 		}
-		
+
 		if (i == 0) {
 			if (!is_digit(lex.value[0]) && lex.value[0] != '(') {
 				printf("Expression must begin with a number or '('\n");
 				return 0;
 			}
-		} 
+		}
 		else {
 			if (i == size - 1) {
 				if (!is_digit(lex.value[0]) && lex.value[0] != ')') {
@@ -263,6 +269,7 @@ lexeme_t add(lexeme_t a, lexeme_t b);
 lexeme_t sub(lexeme_t a, lexeme_t b);
 lexeme_t mult(lexeme_t a, lexeme_t b);
 lexeme_t divide(lexeme_t a, lexeme_t b);
+lexeme_t power(lexeme_t a, lexeme_t b);
 
 // операция суммирования чисел a и b
 lexeme_t add(lexeme_t a, lexeme_t b) {
@@ -319,7 +326,7 @@ lexeme_t sub(lexeme_t a, lexeme_t b) {
 
 		return add(a, b);
 	}
-	
+
 	if (b.sign == -1) {
 		b.sign = 1;
 		return add(a, b);
@@ -392,7 +399,7 @@ lexeme_t mult(lexeme_t a, lexeme_t b) {
 
 	result.value = (char *) malloc((result.length + 1) * sizeof(char)); // строковый массив для результата
 	result.value[result.length] = '\0'; // устанавливаем символ окончания строки
-	
+
 	// заполняем массивы инверсной записью чисел (с ведущими нулями)
 	for (int i = 0; i < result.length; i++) {
 		digits_a[i] = (i < a.length) ? (a.value[a.length - 1 - i] - '0') : 0;
@@ -474,14 +481,14 @@ lexeme_t divide(lexeme_t a, lexeme_t b) {
 	// формируем начальное число для деления
 	while (less(v, tmp) && index < length)
 		v.value[v.length++] = a.value[index++];
-	
+
 	lexeme_t div; // строка результата деления
 	div.length = 0;
 	div.value = (char *)calloc(a.length + 1, sizeof(char));
 
 	do {
 		int count = 0; // результат деления подчисла на делитель
-		
+
 		// если можем разделить, то делим
 		if (!less(v, tmp)) {
 			lexeme_t mod;
@@ -511,7 +518,7 @@ lexeme_t divide(lexeme_t a, lexeme_t b) {
 		if (index <= length) {
 			if (v.value[0] == '0')
 				v.length = 0;
-			
+
 			v.value[v.length++] = a.value[index++]; // формируем новое значение для подчисла
 		}
 	} while (index <= length);
@@ -522,6 +529,43 @@ lexeme_t divide(lexeme_t a, lexeme_t b) {
 	div.sign = a.sign * b.sign;
 
 	return div;
+}
+
+// быстрое возведение числа a в степень b
+lexeme_t power(lexeme_t a, lexeme_t b) {
+	if ((b.length == 1 && b.value[0] == '0') || b.sign == -1) {
+		lexeme_t result;
+		result.length = 1;
+		result.sign = 1;
+		result.value = (char *)calloc(2, sizeof(char));
+		result.value[0] = '1';
+
+		return result;
+	}
+
+	if ((b.value[b.length - 1] - '0') % 2) {
+		lexeme_t one = {"1", 1, 1};
+
+		lexeme_t minus = sub(b, one);
+		lexeme_t p1 = power(a, minus);
+		lexeme_t p = mult(a, p1);
+
+		free(p1.value);
+		free(minus.value);
+
+		return p;
+	}
+
+	lexeme_t two = {"2", 1, 1};
+	lexeme_t div = divide(b, two);
+	lexeme_t p = power(a, div);
+
+	lexeme_t pp = mult(p, p);
+
+	free(div.value);
+	free(p.value);
+
+	return pp;
 }
 
 // вычисление выражения с помощью дерева
@@ -552,6 +596,10 @@ lexeme_t calculate(tree_t *tree) {
 
 	case '/':
 		result = divide(left, right); // если деление, то делим
+		break;
+
+	case '^':
+		result = power(left, right); // если возведение в степень, то возводим в степень
 		break;
 	}
 
@@ -627,7 +675,7 @@ void fromConsole() {
 		int size;
 		lexeme_t *lexemes = parse(&size, stdin); // получаем массив лексем из стандартного файла ввода
 
-		if (size) { // если в выражении что-то есть
+		if (size && lexemes) { // если в выражении что-то есть
 			if (check(lexemes, size)) { // проверяем выражение на корректность
 				for (int i = 0; i < size; i++)
 					printf("%s%s ", lexemes[i].sign == -1 ? "-" : "", lexemes[i].value);
@@ -646,6 +694,9 @@ void fromConsole() {
 			}
 
 			free(lexemes);
+		} else if (lexemes) {
+			printf("empty expression!\n");
+			free(lexemes);
 		}
 
 		printf("Type act ([repeat] / exit): ");
@@ -657,17 +708,29 @@ void fromConsole() {
 int main() {
 	char buf[256];
 
-	printf("Select mode for program ([console] / file): ");
+	printf("Select mode for program ([console] / file / exit): ");
 	fgets(buf, sizeof(buf), stdin);
 
-	if (!strcmp(buf, "file\n")) // если работаем через файл
-		fromFile();
-	else if (!strcmp(buf, "console\n") || !strcmp(buf, "\n"))
-		fromConsole();
-	else {
-		printf("Uncknown mode. Exiting\n");
-		system("pause");
-	}		
+	if (!strcmp(buf, "exit\n"))
+		return 0;
+
+	while (1) {
+		if (!strcmp(buf, "file\n")) {// если работаем через файл
+			fromFile();
+			break;
+		}
+		else if (!strcmp(buf, "console\n") || !strcmp(buf, "\n")) {
+			fromConsole();
+			break;
+		}
+		else if (!strcmp(buf, "exit\n")) {
+			break;
+		}
+		else {
+			printf("Uncknown mode. Type again ([console] / file / exit): ");
+			fgets(buf, sizeof(buf), stdin);
+		}
+	}
 
 	return 0;
 }
